@@ -1,0 +1,595 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mendeleev</title>
+<script src="/preload.js"></script>
+<style>
+  :root {
+    --c-system: #9aa0a6;
+    --c-user: #a8c7fa;
+    --c-agent: #4c8df6;
+    --c-tool: #f9ab00;
+    --c-custom: #c58af9;
+    --c-sysmsg: #f28b82;
+    --c-ok: #81c995;
+    --c-warn: #fdd663;
+    --c-bad: #f28b82;
+    --fg: var(--foreground, #e3e3e3);
+    --dim: var(--muted-foreground, #9aa0a6);
+    --line: var(--border, rgba(127, 127, 127, .24));
+    --card-bg: color-mix(in srgb, var(--dim) 7%, transparent);
+    --empty: color-mix(in srgb, var(--dim) 26%, transparent);
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    color: var(--fg);
+    font: 13px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "PingFang SC", "Microsoft YaHei", sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-track, ::-webkit-scrollbar-corner { background: transparent; }
+  ::-webkit-scrollbar-button { display: none; }
+  ::-webkit-scrollbar-thumb {
+    background: color-mix(in srgb, var(--dim) 30%, transparent);
+    border: 3px solid transparent;
+    border-radius: 999px;
+    background-clip: padding-box;
+  }
+  ::-webkit-scrollbar-thumb:hover { background-color: color-mix(in srgb, var(--dim) 55%, transparent); }
+
+  main { padding: 12px 14px 20px; }
+  .dim { color: var(--dim); }
+  .num { font-variant-numeric: tabular-nums; }
+
+  /* Header */
+  .top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  .model {
+    font-size: 12px; color: var(--dim); display: flex; align-items: center; gap: 6px;
+    min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .live { width: 6px; height: 6px; border-radius: 50%; background: var(--empty); flex: none; }
+  .live.on { background: var(--c-ok); }
+  .actions { display: flex; align-items: center; gap: 5px; flex: none; }
+  button {
+    font: inherit; font-size: 11.5px; color: var(--dim); cursor: pointer; white-space: nowrap;
+    background: transparent; border: 1px solid var(--line); border-radius: 6px; padding: 2px 7px;
+    transition: color .15s, border-color .15s;
+  }
+  button:hover { color: var(--fg); border-color: var(--dim); }
+
+  /* Hero context usage */
+  .usage { margin: 4px 0 10px; display: flex; align-items: baseline; gap: 6px; flex-wrap: wrap; }
+  .usage .big { font-size: 24px; font-weight: 600; letter-spacing: -.015em; }
+  .usage .of { color: var(--dim); font-size: 12.5px; }
+  .usage .pct { margin-left: auto; font-size: 13px; font-weight: 600; }
+
+  /* 100-dot grid */
+  .grid { display: grid; grid-template-columns: repeat(20, 1fr); gap: 4px; max-width: 320px; margin-bottom: 12px; }
+  .dot { aspect-ratio: 1; border-radius: 50%; background: var(--empty); }
+
+  /* Telemetry 2x2 micro-cards */
+  .metrics {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 6px;
+    margin-bottom: 4px;
+  }
+  .metric-card {
+    background: var(--card-bg);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 7px 9px;
+    min-width: 0;
+  }
+  .metric-label { font-size: 11px; color: var(--dim); margin-bottom: 2px; }
+  .metric-val { font-size: 15px; font-weight: 600; line-height: 1.25; }
+  .metric-sub {
+    font-size: 11px; color: var(--dim); margin-top: 2px;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+
+  /* Collapsible sections */
+  section { border-top: 1px solid var(--line); margin-top: 12px; padding-top: 9px; }
+  .sec-head {
+    display: flex; align-items: center; justify-content: space-between; gap: 8px;
+    cursor: pointer; user-select: none; padding: 1px 0; margin-bottom: 6px;
+  }
+  .sec-head:hover .sec-title { color: var(--fg); }
+  .sec-title {
+    font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .05em;
+    color: var(--dim); display: flex; align-items: center; gap: 5px; transition: color .15s;
+  }
+  .caret {
+    width: 14px; height: 14px; display: inline-flex; align-items: center; justify-content: center;
+    transform-origin: center; transition: transform .15s ease; flex: none;
+  }
+  .caret svg { width: 14px; height: 14px; display: block; }
+  section.collapsed .caret { transform: rotate(-90deg); }
+  section.collapsed .sec-head { margin-bottom: 0; }
+  section.collapsed .sec-body { display: none; }
+  .hint { font-size: 11px; color: var(--dim); font-weight: 400; text-transform: none; letter-spacing: 0; }
+
+  .note { font-size: 11.5px; color: var(--dim); margin: 0 0 6px; }
+  .group + .group { margin-top: 8px; }
+  .row { display: grid; grid-template-columns: 10px 1fr auto 44px; align-items: center; gap: 8px; padding: 2.5px 0; }
+  .row .tok { text-align: right; }
+  .row .p { text-align: right; color: var(--dim); font-size: 12px; }
+  .mark { width: 8px; height: 8px; border-radius: 50%; }
+  .mark.sq { border-radius: 2px; }
+  .mark.free { background: transparent; border: 1.5px solid var(--empty); }
+
+  /* Quota pools */
+  .quota-list { display: flex; flex-direction: column; gap: 7px; }
+  .quota-item { display: flex; flex-direction: column; gap: 3px; }
+  .quota-top { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; font-size: 12px; }
+  .quota-name { display: flex; align-items: center; gap: 5px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .quota-tag { font-size: 10px; color: var(--c-ok); border: 1px solid color-mix(in srgb, var(--c-ok) 45%, transparent); border-radius: 4px; padding: 0 4px; }
+  .quota-bar { height: 4px; border-radius: 999px; background: var(--empty); overflow: hidden; }
+  .quota-fill { height: 100%; border-radius: 999px; background: var(--c-agent); }
+  .quota-fill.warn { background: var(--c-warn); }
+  .quota-fill.bad { background: var(--c-bad); }
+
+  /* Files & Checkpoints */
+  ul { list-style: none; margin: 0; padding: 0; }
+  .files li { display: grid; grid-template-columns: 1fr auto; gap: 8px; padding: 3px 0; }
+  .files .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .files .dir {
+    display: block; font-size: 11px; color: var(--dim);
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap; direction: rtl; text-align: left;
+  }
+  .files .tok { color: var(--dim); font-size: 12px; align-self: start; }
+
+  .ck-main { display: flex; justify-content: space-between; align-items: center; gap: 8px; font-size: 12.5px; }
+  .badge {
+    font-size: 10.5px; color: var(--c-ok); border: 1px solid color-mix(in srgb, var(--c-ok) 40%, transparent);
+    border-radius: 999px; padding: 0 7px; white-space: nowrap;
+  }
+
+  .empty { margin: 48px 10px; text-align: center; color: var(--dim); }
+  footer {
+    margin-top: 14px; padding-top: 8px; border-top: 1px solid var(--line);
+    font-size: 11px; color: var(--dim); display: flex; justify-content: space-between; gap: 8px; flex-wrap: wrap;
+  }
+</style>
+</head>
+<body>
+<main id="main"><p class="empty">Loading…</p></main>
+
+<script>
+(() => {
+  const POLL_MS = 3000;
+  const SEGMENT_COLORS = ['var(--c-system)', 'var(--c-user)', 'var(--c-agent)', 'var(--c-tool)', 'var(--c-custom)'];
+  const CONVERSATION = { user: 'var(--c-user)', agent: 'var(--c-agent)', tool: 'var(--c-tool)', system_messages: 'var(--c-sysmsg)' };
+  const SYSTEM_KEYS = new Set(['system_prompt', 'system_tools', 'system_overhead']);
+
+  const I18N = {
+    zh: {
+      loading: '加载中…',
+      copy: '复制',
+      copied: '已复制',
+      langBtn: 'EN',
+      unknown: '未知',
+      dotTitle: '每颗圆点代表 1% 上下文窗口',
+      cacheRate: '缓存命中率',
+      cacheSub: '已命中 {hit} · 新输入 {inp}',
+      speed: '生成速度',
+      speedSub: '最新 {latest} t/s',
+      ttft: '首字延迟 (TTFT)',
+      ttftSub: '会话均值 {avg}s',
+      cost: '估算费用',
+      costSub: '省 ${saved} · {calls} 次调用',
+      costNoSaved: '{calls} 次调用 · 累计 {out}',
+      secUsage: 'Token 占用明细',
+      secQuotas: '模型配额池',
+      secCheckpoints: '检查点 (Checkpoints)',
+      secKnowledge: '知识库文件',
+      secArtifacts: '产物文件',
+      secSkills: 'Skill 文件',
+      secSystem: '系统目录',
+      freeSpace: '剩余可用空间',
+      ckBuffer: '检查点缓冲区：{tok} tokens（不计入占用）',
+      ckActive: '检查点 {num}：{text}',
+      ckInContext: '上下文中',
+      ckOlder: '{n} 个更早检查点已压缩摘要，不再占用上下文',
+      ckHint: '{n} 个 · 已压缩 {h} 次',
+      currentPool: '当前',
+      resetIn: '{t} 后重置',
+      resetReady: '即将重置',
+      planLabel: '{plan}',
+      updated: '更新于 {t}',
+      noConv: '打开一个对话即可查看上下文与性能透视。',
+      noData: '当前对话暂无模型调用记录，请先发送一条消息。',
+      errPrefix: '读取对话失败：',
+      estCompaction: '压缩后预估 · 下轮对话更新精确值',
+      estAwaiting: '预估占用（等待模型响应）',
+      cats: {
+        user: '用户消息',
+        agent: 'Agent 回复',
+        tool: '工具调用',
+        system_messages: '系统消息',
+        system_prompt: '系统提示词',
+        system_tools: '系统工具定义',
+        system_overhead: '系统开销',
+        rules: '规则 (Rules)',
+        skills: '技能 (Skills)',
+        subagents: '子代理 (Subagents)',
+        legacy_workflows: '旧版工作流',
+        workflows: '工作流 (Workflows)',
+        plugins: '插件 (Plugins)',
+        mcp_tools: 'MCP 工具',
+      },
+    },
+    en: {
+      loading: 'Loading…',
+      copy: 'Copy',
+      copied: 'Copied',
+      langBtn: '中',
+      unknown: 'Unknown',
+      dotTitle: 'Each dot is 1% of the context window',
+      cacheRate: 'Cache Hit Rate',
+      cacheSub: 'Read {hit} · New {inp}',
+      speed: 'Avg Speed',
+      speedSub: 'Latest {latest} t/s',
+      ttft: 'First Token (TTFT)',
+      ttftSub: 'Session avg {avg}s',
+      cost: 'Est. Cost',
+      costSub: 'Saved ${saved} · {calls} calls',
+      costNoSaved: '{calls} calls · Out {out}',
+      secUsage: 'Token usage',
+      secQuotas: 'Quota pools',
+      secCheckpoints: 'Checkpoints',
+      secKnowledge: 'Knowledge files',
+      secArtifacts: 'Artifact files',
+      secSkills: 'Skill files',
+      secSystem: 'System folders',
+      freeSpace: 'Free space',
+      ckBuffer: 'Checkpoint buffer: {tok} tokens (not counted in usage)',
+      ckActive: 'Checkpoint {num}: {text}',
+      ckInContext: 'in context',
+      ckOlder: '{n} older checkpoint(s) summarized, not in context',
+      ckHint: '{n} · {h} compacted',
+      currentPool: 'Active',
+      resetIn: 'Resets in {t}',
+      resetReady: 'Resetting',
+      planLabel: '{plan}',
+      updated: 'Updated {t}',
+      noConv: 'Open a conversation to inspect its context and metrics.',
+      noData: 'No saved data yet. Send a message first.',
+      errPrefix: 'Failed to read conversation: ',
+      estCompaction: 'Estimated after compaction · updates next turn',
+      estAwaiting: 'Estimated usage (awaiting generation)',
+      cats: {
+        user: 'User messages',
+        agent: 'Agent responses',
+        tool: 'Tool calls',
+        system_messages: 'System messages',
+        system_prompt: 'System prompt',
+        system_tools: 'System tools',
+        system_overhead: 'System overhead',
+        rules: 'Rules',
+        skills: 'Skills',
+        subagents: 'Subagents',
+        legacy_workflows: 'Legacy workflows',
+        workflows: 'Workflows',
+        plugins: 'Plugins',
+        mcp_tools: 'MCP tools',
+      },
+    },
+  };
+
+  const DEFAULT_COLLAPSED = {
+    usage: false,
+    quotas: false,
+    checkpoints: true,
+    knowledge: false,
+    artifacts: false,
+    skills: true,
+    system: true,
+  };
+
+  let lang = localStorage.getItem('mendeleev.lang') || (navigator.language.startsWith('zh') ? 'zh' : 'en');
+  let collapsed = { ...DEFAULT_COLLAPSED, ...JSON.parse(localStorage.getItem('mendeleev.collapsed') || '{}') };
+
+  const params = new URLSearchParams(location.search);
+  const conversationId = (window.sidecar && window.sidecar.conversationId) || params.get('conversationId') || '';
+  const doFetch = (window.sidecar && window.sidecar.fetch) || fetch;
+  const main = document.getElementById('main');
+  let workspace = '';
+  let report = null;
+  let lastJson = '';
+
+  const t = (key, vars = {}) => {
+    const str = I18N[lang]?.[key] ?? I18N.en[key] ?? key;
+    return str.replace(/\{(\w+)\}/g, (_, k) => (vars[k] !== undefined ? vars[k] : ''));
+  };
+  const esc = (s) =>
+    String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+  function fmtTok(n) {
+    if (n >= 1e6) {
+      const v = n / 1e6;
+      return Number.isInteger(v) ? `${v}M` : `${v.toFixed(1)}M`;
+    }
+    if (n >= 1e3) return `${(n / 1e3).toFixed(1)}k`;
+    return String(n);
+  }
+
+  function fmtUsd(v) {
+    if (v === null || v === undefined) return '--';
+    if (v >= 1) return `$${v.toFixed(2)}`;
+    if (v >= 0.01) return `$${v.toFixed(3)}`;
+    return `$${v.toFixed(4)}`;
+  }
+
+  function fmtReset(iso) {
+    if (!iso) return '';
+    const diffMs = Date.parse(iso) - Date.now();
+    if (!Number.isFinite(diffMs) || diffMs <= 0) return t('resetReady');
+    const mins = Math.floor(diffMs / 60000);
+    const hrs = Math.floor(mins / 60);
+    const remM = mins % 60;
+    const days = Math.floor(hrs / 24);
+    if (days > 0) return t('resetIn', { t: `${days}d ${hrs % 24}h` });
+    if (hrs > 0) return t('resetIn', { t: `${hrs}h ${remM}m` });
+    return t('resetIn', { t: `${Math.max(1, remM)}m` });
+  }
+
+  function gridCells(segments, limit, total) {
+    let counts = segments.map((tok) => (!tok || !limit ? 0 : Math.max(1, Math.floor((tok / limit) * total))));
+    const used = counts.reduce((a, b) => a + b, 0);
+    if (used > total) counts = counts.map((c) => Math.floor((c * total) / used));
+    return [...counts, total - counts.reduce((a, b) => a + b, 0)];
+  }
+
+  function renderGrid(r) {
+    const counts = gridCells(r.gridSegments, r.limitTokens, 100);
+    let dots = '';
+    counts.forEach((n, i) => {
+      dots += (i === 5 ? '<span class="dot"></span>' : `<span class="dot" style="background:${SEGMENT_COLORS[i]}"></span>`).repeat(n);
+    });
+    return `<div class="grid" title="${esc(t('dotTitle'))}">${dots}</div>`;
+  }
+
+  function renderTelemetry(r) {
+    const m = r.telemetry || {};
+    const cacheVal = m.cacheHitRate !== null ? `${m.cacheHitRate.toFixed(1)}%` : '--';
+    const cacheSub = m.cacheHitRate !== null ? t('cacheSub', { hit: fmtTok(m.totalCacheRead), inp: fmtTok(m.totalInput) }) : '--';
+
+    const speedVal = m.avgTps !== null ? `${m.avgTps.toFixed(1)} t/s` : '--';
+    const speedSub = m.latestTps !== null ? t('speedSub', { latest: m.latestTps.toFixed(1) }) : '--';
+
+    const ttftVal = m.latestTtftSec !== null ? `${m.latestTtftSec.toFixed(2)}s` : '--';
+    const ttftSub = m.avgTtftSec !== null ? t('ttftSub', { avg: m.avgTtftSec.toFixed(2) }) : '--';
+
+    const costVal = m.totalCostUsd !== null ? `~${fmtUsd(m.totalCostUsd)}` : '--';
+    const costSub =
+      m.savedCostUsd !== null && m.savedCostUsd > 0
+        ? t('costSub', { saved: m.savedCostUsd.toFixed(2), calls: m.callCount })
+        : t('costNoSaved', { calls: m.callCount || 0, out: fmtTok(m.totalOutput || 0) });
+
+    return `<div class="metrics">
+      <div class="metric-card">
+        <div class="metric-label">${esc(t('cacheRate'))}</div>
+        <div class="metric-val num">${esc(cacheVal)}</div>
+        <div class="metric-sub num">${esc(cacheSub)}</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-label">${esc(t('speed'))}</div>
+        <div class="metric-val num">${esc(speedVal)}</div>
+        <div class="metric-sub num">${esc(speedSub)}</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-label">${esc(t('ttft'))}</div>
+        <div class="metric-val num">${esc(ttftVal)}</div>
+        <div class="metric-sub num">${esc(ttftSub)}</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-label">${esc(t('cost'))}</div>
+        <div class="metric-val num">${esc(costVal)}</div>
+        <div class="metric-sub num">${esc(costSub)}</div>
+      </div>
+    </div>`;
+  }
+
+  const CHEVRON_SVG = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 6 8 10 12 6"/></svg>';
+
+  function section(id, title, hint, bodyHtml) {
+    const isCollapsed = Boolean(collapsed[id]);
+    return `<section data-sec="${id}" class="${isCollapsed ? 'collapsed' : ''}">
+      <div class="sec-head">
+        <span class="sec-title"><span class="caret">${CHEVRON_SVG}</span>${esc(title)}</span>
+        ${hint ? `<span class="hint num">${esc(hint)}</span>` : ''}
+      </div>
+      <div class="sec-body">${bodyHtml}</div>
+    </section>`;
+  }
+
+  function renderCategories(r) {
+    const conv = r.categories.filter((c) => CONVERSATION[c.key]);
+    const rest = r.categories.filter((c) => !CONVERSATION[c.key]);
+    const row = (c) => {
+      const color = CONVERSATION[c.key] || (SYSTEM_KEYS.has(c.key) ? 'var(--c-system)' : 'var(--c-custom)');
+      const shape = CONVERSATION[c.key] ? '' : ' sq';
+      const label = I18N[lang]?.cats?.[c.key] || c.name;
+      return `<div class="row"><span class="mark${shape}" style="background:${color}"></span><span>${esc(label)}</span>`
+        + `<span class="tok num">${fmtTok(c.tokens)}</span><span class="p num">${c.pct.toFixed(1)}%</span></div>`;
+    };
+    const freePct = r.limitTokens ? ((r.freeTokens / r.limitTokens) * 100).toFixed(1) : '0.0';
+    const freeRow = `<div class="row"><span class="mark free"></span><span class="dim">${esc(t('freeSpace'))}</span>`
+      + `<span class="tok num">${fmtTok(r.freeTokens)}</span><span class="p num">${freePct}%</span></div>`;
+
+    let note = '';
+    if (r.isEstimated) {
+      note = `<p class="note">${esc(r.checkpointView ? t('estCompaction') : t('estAwaiting'))}</p>`;
+    }
+    const buffer = r.checkpointBuffer
+      ? `<p class="note" style="margin-top:6px;margin-bottom:0">${esc(t('ckBuffer', { tok: fmtTok(r.checkpointBuffer) }))}</p>`
+      : '';
+
+    const body = `${note}<div class="group">${conv.map(row).join('')}</div>`
+      + `${rest.length ? `<div class="group">${rest.map(row).join('')}</div>` : ''}`
+      + `<div class="group">${freeRow}</div>${buffer}`;
+
+    return section('usage', t('secUsage'), `${r.usedPct.toFixed(1)}%`, body);
+  }
+
+  function renderQuotas(r) {
+    const q = r.quotas;
+    if (!q || !q.pools || !q.pools.length) return '';
+    const rows = q.pools.map((p) => {
+      const cls = p.remainingPct <= 15 ? 'bad' : p.remainingPct <= 35 ? 'warn' : '';
+      const resetTxt = fmtReset(p.resetTime);
+      return `<div class="quota-item">
+        <div class="quota-top">
+          <span class="quota-name">${esc(p.family)}${p.isCurrent ? `<span class="quota-tag">${esc(t('currentPool'))}</span>` : ''}</span>
+          <span class="num">${p.remainingPct.toFixed(0)}%${resetTxt ? ` <span class="dim">· ${esc(resetTxt)}</span>` : ''}</span>
+        </div>
+        <div class="quota-bar"><div class="quota-fill ${cls}" style="width:${p.remainingPct}%"></div></div>
+      </div>`;
+    }).join('');
+    return section('quotas', t('secQuotas'), q.planName || '', `<div class="quota-list">${rows}</div>`);
+  }
+
+  function renderCheckpoints(r) {
+    const ck = r.checkpointView;
+    if (!ck) return '';
+    const older = ck.historical ? `<div class="dim" style="font-size:11.5px;margin-top:4px">${esc(t('ckOlder', { n: ck.historical }))}</div>` : '';
+    const body = `<div class="ck-main"><span>${esc(t('ckActive', { num: ck.activeNumber, text: ck.activeText }))}</span>`
+      + `<span class="badge">${esc(t('ckInContext'))}</span></div>${older}`;
+    return section('checkpoints', t('secCheckpoints'), t('ckHint', { n: ck.count, h: ck.historical }), body);
+  }
+
+  function splitPath(path) {
+    const trimmed = path.replace(/\/$/, '');
+    const i = trimmed.lastIndexOf('/');
+    const name = trimmed.slice(i + 1) + (path.endsWith('/') ? '/' : '');
+    let dir = i > 0 ? trimmed.slice(0, i) : '';
+    if (conversationId) dir = dir.replace(new RegExp(`^.*/brain/${conversationId}`), 'conversation');
+    return { name, dir };
+  }
+
+  function renderFiles(id, titleKey, items) {
+    if (!items || !items.length) return '';
+    const rows = items.map((f) => {
+      const { name, dir } = splitPath(f.path);
+      return `<li title="${esc(f.path)}"><span class="name">${esc(name)}<span class="dir">‎${esc(dir)}</span></span>`
+        + `<span class="tok num">${f.tokens > 0 ? fmtTok(f.tokens) : ''}</span></li>`;
+    }).join('');
+    return section(id, t(titleKey), `${items.length}`, `<ul class="files">${rows}</ul>`);
+  }
+
+  function render(r) {
+    const lim = r.limitTokens ? fmtTok(r.limitTokens) : t('unknown');
+    main.innerHTML = `
+      <div class="top">
+        <div class="model" title="${esc(r.model)}"><span class="live on"></span>${esc(r.model)}</div>
+        <div class="actions">
+          <button id="langBtn">${esc(t('langBtn'))}</button>
+          <button id="copyBtn">${esc(t('copy'))}</button>
+        </div>
+      </div>
+      <div class="usage">
+        <span class="big num">${fmtTok(r.usedTokens)}</span>
+        <span class="of">/ ${esc(lim)} tokens</span>
+        ${r.limitTokens ? `<span class="pct num">${r.usedPct.toFixed(1)}%</span>` : ''}
+      </div>
+      ${renderGrid(r)}
+      ${renderTelemetry(r)}
+      ${renderCategories(r)}
+      ${renderQuotas(r)}
+      ${renderCheckpoints(r)}
+      ${renderFiles('knowledge', 'secKnowledge', r.files.knowledge)}
+      ${renderFiles('artifacts', 'secArtifacts', r.files.artifacts)}
+      ${renderFiles('skills', 'secSkills', r.files.skills)}
+      ${renderFiles('system', 'secSystem', r.files.system)}
+      <footer>
+        <span>Mendeleev · Md 101</span>
+        <span>${esc(t('updated', { t: new Date(r.updatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) }))}</span>
+      </footer>`;
+
+    document.getElementById('langBtn').addEventListener('click', () => {
+      lang = lang === 'zh' ? 'en' : 'zh';
+      localStorage.setItem('mendeleev.lang', lang);
+      render(report);
+    });
+    document.getElementById('copyBtn').addEventListener('click', copyReport);
+    main.querySelectorAll('.sec-head').forEach((head) => {
+      head.addEventListener('click', () => {
+        const sec = head.parentElement;
+        const id = sec.dataset.sec;
+        const next = !sec.classList.contains('collapsed');
+        sec.classList.toggle('collapsed', next);
+        collapsed[id] = next;
+        localStorage.setItem('mendeleev.collapsed', JSON.stringify(collapsed));
+      });
+    });
+  }
+
+  async function copyReport(event) {
+    if (!report) return;
+    try {
+      await navigator.clipboard.writeText(report.text);
+    } catch {
+      const ta = document.createElement('textarea');
+      ta.value = report.text;
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand('copy');
+      ta.remove();
+    }
+    const btn = event.currentTarget;
+    btn.textContent = t('copied');
+    setTimeout(() => { btn.textContent = t('copy'); }, 1400);
+  }
+
+  function showMessage(text) {
+    report = null;
+    lastJson = '';
+    main.innerHTML = `<p class="empty">${esc(text)}</p>`;
+  }
+
+  async function refresh() {
+    if (document.hidden) return;
+    try {
+      const qs = new URLSearchParams({ conversationId, workspace });
+      const res = await doFetch(`/api/report?${qs}`);
+      const data = await res.json();
+      if (data.error === 'no-conversation') return showMessage(t('noConv'));
+      if (data.error === 'no-data') return showMessage(t('noData'));
+      if (data.error) return showMessage(`${t('errPrefix')}${data.message || data.error}`);
+      const json = JSON.stringify(data);
+      if (json === lastJson) return;
+      lastJson = json;
+      report = data;
+      render(data);
+    } catch {
+      const dot = document.querySelector('.live');
+      if (dot) dot.classList.remove('on');
+    }
+  }
+
+  document.addEventListener('visibilitychange', refresh);
+
+  async function start() {
+    if (window.sidecar && window.sidecar.getWorkspaceUris) {
+      const uris = await window.sidecar.getWorkspaceUris();
+      workspace = uris[0] || '';
+      window.sidecar.onWorkspaceChange((next) => {
+        if ((next[0] || '') !== workspace) {
+          workspace = next[0] || '';
+          lastJson = '';
+          refresh();
+        }
+      });
+    }
+    refresh();
+    setInterval(refresh, POLL_MS);
+  }
+  start();
+})();
+</script>
+</body>
+</html>
