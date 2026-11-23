@@ -127,7 +127,7 @@ function buildTextReport(r) {
   const perf = [
     t.cacheHitRate !== null ? `Cache ${t.cacheHitRate}%` : null,
     t.avgTps !== null ? `Avg ${t.avgTps} t/s` : null,
-    t.latestTtftSec !== null ? `TTFT ${t.latestTtftSec}s` : null,
+    t.avgTtftSec !== null ? `TTFT ${t.avgTtftSec}s` : null,
     t.totalCostUsd !== null ? `Est. $${t.totalCostUsd.toFixed(4)}` : null,
   ].filter(Boolean);
   if (perf.length) lines.push(perf.join(' · '));

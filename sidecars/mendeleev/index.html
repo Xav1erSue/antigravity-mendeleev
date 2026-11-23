@@ -174,17 +174,17 @@
       unknown: '未知',
       dotTitle: '每颗圆点代表 1% 上下文窗口',
       cacheRate: '缓存命中率',
-      cacheSub: '已命中 {hit} · 新输入 {inp}',
+      cacheSub: '命中 {hit} · 新输入 {inp}',
       speed: '生成速度',
-      speedSub: '最新 {latest} t/s',
-      ttft: '首字延迟 (TTFT)',
-      ttftSub: '会话均值 {avg}s',
+      speedSub: '最近一次 {latest} tok/s',
+      ttft: '首字延迟',
+      ttftSub: '最近一次 {latest}',
       cost: '估算费用',
-      costSub: '省 ${saved} · {calls} 次调用',
-      costNoSaved: '{calls} 次调用 · 累计 {out}',
-      secUsage: 'Token 占用明细',
+      costSub: '省 {saved} · {calls} 次调用',
+      costNoSaved: '{calls} 次调用 · 输出 {out}',
+      secUsage: '上下文占用明细',
       secQuotas: '模型配额池',
-      secCheckpoints: '检查点 (Checkpoints)',
+      secCheckpoints: '检查点',
       secKnowledge: '知识库文件',
       secArtifacts: '产物文件',
       secSkills: 'Skill 文件',
@@ -195,10 +195,10 @@
       ckInContext: '上下文中',
       ckOlder: '{n} 个更早检查点已压缩摘要，不再占用上下文',
       ckHint: '{n} 个 · 已压缩 {h} 次',
+      ckHintSingle: '{n} 个',
       currentPool: '当前',
       resetIn: '{t} 后重置',
       resetReady: '即将重置',
-      planLabel: '{plan}',
       updated: '更新于 {t}',
       noConv: '打开一个对话即可查看上下文与性能透视。',
       noData: '当前对话暂无模型调用记录，请先发送一条消息。',
@@ -213,12 +213,12 @@
         system_prompt: '系统提示词',
         system_tools: '系统工具定义',
         system_overhead: '系统开销',
-        rules: '规则 (Rules)',
-        skills: '技能 (Skills)',
-        subagents: '子代理 (Subagents)',
+        rules: '规则',
+        skills: '技能',
+        subagents: '子代理',
         legacy_workflows: '旧版工作流',
-        workflows: '工作流 (Workflows)',
-        plugins: '插件 (Plugins)',
+        workflows: '工作流',
+        plugins: '插件',
         mcp_tools: 'MCP 工具',
       },
     },
@@ -228,15 +228,15 @@
       copied: 'Copied',
       langBtn: '中',
       unknown: 'Unknown',
-      dotTitle: 'Each dot is 1% of the context window',
+      dotTitle: 'Each dot represents 1% of the context window',
       cacheRate: 'Cache Hit Rate',
-      cacheSub: 'Read {hit} · New {inp}',
-      speed: 'Avg Speed',
-      speedSub: 'Latest {latest} t/s',
-      ttft: 'First Token (TTFT)',
-      ttftSub: 'Session avg {avg}s',
+      cacheSub: 'Hit {hit} · New {inp}',
+      speed: 'Output Speed',
+      speedSub: 'Latest {latest} tok/s',
+      ttft: 'TTFT',
+      ttftSub: 'Latest {latest}',
       cost: 'Est. Cost',
-      costSub: 'Saved ${saved} · {calls} calls',
+      costSub: 'Saved {saved} · {calls} calls',
       costNoSaved: '{calls} calls · Out {out}',
       secUsage: 'Token usage',
       secQuotas: 'Quota pools',
@@ -251,10 +251,10 @@
       ckInContext: 'in context',
       ckOlder: '{n} older checkpoint(s) summarized, not in context',
       ckHint: '{n} · {h} compacted',
+      ckHintSingle: '{n}',
       currentPool: 'Active',
       resetIn: 'Resets in {t}',
       resetReady: 'Resetting',
-      planLabel: '{plan}',
       updated: 'Updated {t}',
       noConv: 'Open a conversation to inspect its context and metrics.',
       noData: 'No saved data yet. Send a message first.',
@@ -353,21 +353,26 @@
     return `<div class="grid" title="${esc(t('dotTitle'))}">${dots}</div>`;
   }
 
+  function fmtSec(s) {
+    if (s === null || s === undefined) return '--';
+    return s >= 10 ? `${s.toFixed(1)}s` : `${s.toFixed(2)}s`;
+  }
+
   function renderTelemetry(r) {
     const m = r.telemetry || {};
     const cacheVal = m.cacheHitRate !== null ? `${m.cacheHitRate.toFixed(1)}%` : '--';
     const cacheSub = m.cacheHitRate !== null ? t('cacheSub', { hit: fmtTok(m.totalCacheRead), inp: fmtTok(m.totalInput) }) : '--';
 
-    const speedVal = m.avgTps !== null ? `${m.avgTps.toFixed(1)} t/s` : '--';
+    const speedVal = m.avgTps !== null ? `${m.avgTps.toFixed(1)} tok/s` : '--';
     const speedSub = m.latestTps !== null ? t('speedSub', { latest: m.latestTps.toFixed(1) }) : '--';
 
-    const ttftVal = m.latestTtftSec !== null ? `${m.latestTtftSec.toFixed(2)}s` : '--';
-    const ttftSub = m.avgTtftSec !== null ? t('ttftSub', { avg: m.avgTtftSec.toFixed(2) }) : '--';
+    const ttftVal = fmtSec(m.avgTtftSec);
+    const ttftSub = m.latestTtftSec !== null ? t('ttftSub', { latest: fmtSec(m.latestTtftSec) }) : '--';
 
     const costVal = m.totalCostUsd !== null ? `~${fmtUsd(m.totalCostUsd)}` : '--';
     const costSub =
-      m.savedCostUsd !== null && m.savedCostUsd > 0
-        ? t('costSub', { saved: m.savedCostUsd.toFixed(2), calls: m.callCount })
+      m.savedCostUsd !== null && m.savedCostUsd >= 0.001
+        ? t('costSub', { saved: fmtUsd(m.savedCostUsd), calls: m.callCount })
         : t('costNoSaved', { calls: m.callCount || 0, out: fmtTok(m.totalOutput || 0) });
 
     return `<div class="metrics">
@@ -459,7 +464,8 @@
     const older = ck.historical ? `<div class="dim" style="font-size:11.5px;margin-top:4px">${esc(t('ckOlder', { n: ck.historical }))}</div>` : '';
     const body = `<div class="ck-main"><span>${esc(t('ckActive', { num: ck.activeNumber, text: ck.activeText }))}</span>`
       + `<span class="badge">${esc(t('ckInContext'))}</span></div>${older}`;
-    return section('checkpoints', t('secCheckpoints'), t('ckHint', { n: ck.count, h: ck.historical }), body);
+    const hint = ck.historical > 0 ? t('ckHint', { n: ck.count, h: ck.historical }) : t('ckHintSingle', { n: ck.count });
+    return section('checkpoints', t('secCheckpoints'), hint, body);
   }
 
   function splitPath(path) {
@@ -528,13 +534,43 @@
     });
   }
 
+  function buildLocalizedText(r) {
+    const lines = [];
+    const lim = r.limitTokens ? `${fmtTok(r.limitTokens)} tokens (${r.usedPct.toFixed(1)}%)` : t('unknown');
+    lines.push(`${r.model} · ${fmtTok(r.usedTokens)} / ${lim}`);
+    const m = r.telemetry || {};
+    const perf = [
+      m.cacheHitRate !== null ? `${t('cacheRate')} ${m.cacheHitRate}%` : null,
+      m.avgTps !== null ? `${t('speed')} ${m.avgTps} tok/s` : null,
+      m.avgTtftSec !== null ? `${t('ttft')} ${fmtSec(m.avgTtftSec)}` : null,
+      m.totalCostUsd !== null ? `${t('cost')} ~${fmtUsd(m.totalCostUsd)}` : null,
+    ].filter(Boolean);
+    if (perf.length) lines.push(perf.join(' · '));
+    lines.push('');
+    lines.push(t('secUsage'));
+    for (const c of r.categories) {
+      const label = I18N[lang]?.cats?.[c.key] || c.name;
+      lines.push(`- ${label}: ${fmtTok(c.tokens)} (${c.pct.toFixed(1)}%)`);
+    }
+    lines.push(`- ${t('freeSpace')}: ${fmtTok(r.freeTokens)}`);
+    if (r.quotas?.pools?.length) {
+      lines.push('');
+      lines.push(t('secQuotas'));
+      for (const p of r.quotas.pools) {
+        lines.push(`- ${p.family}: ${p.remainingPct}%`);
+      }
+    }
+    return lines.join('\n');
+  }
+
   async function copyReport(event) {
     if (!report) return;
+    const text = buildLocalizedText(report);
     try {
-      await navigator.clipboard.writeText(report.text);
+      await navigator.clipboard.writeText(text);
     } catch {
       const ta = document.createElement('textarea');
-      ta.value = report.text;
+      ta.value = text;
       document.body.appendChild(ta);
       ta.select();
       document.execCommand('copy');
@@ -574,6 +610,7 @@
   document.addEventListener('visibilitychange', refresh);
 
   async function start() {
+    main.innerHTML = `<p class="empty">${esc(t('loading'))}</p>`;
     if (window.sidecar && window.sidecar.getWorkspaceUris) {
       const uris = await window.sidecar.getWorkspaceUris();
       workspace = uris[0] || '';

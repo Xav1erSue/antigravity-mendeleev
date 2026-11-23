@@ -1,7 +1,7 @@
 {
   "name": "mendeleev",
   "displayName": "Mendeleev · 门捷列夫",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "像化学家一样透视每个模型的每次调用：精准上下文占用、缓存命中率、TPS、首字延迟、估算费用与配额池。",
   "logo": "assets/logo.svg",
   "suggestedPrompts": [

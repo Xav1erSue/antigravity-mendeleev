@@ -57,6 +57,8 @@ test('analyzeTrajectory computes context, cache hit rate, TPS, TTFT, cost, and q
           model: 'MODEL_PLACEHOLDER_M526',
           modelDisplayName: 'Gemini 4 Hydrogen (Medium)',
           timeToFirstToken: '1.5s',
+          streamingDuration: '2.5s',
+          usage: { outputTokens: '500' },
           chatStartMetadata: {
             checkpointIndex: 1,
             contextWindowMetadata: {
@@ -111,7 +113,7 @@ test('analyzeTrajectory computes context, cache hit rate, TPS, TTFT, cost, and q
   assert.equal(report.usedTokens, 50000);
   assert.equal(report.limitTokens, 1048576);
   assert.equal(report.telemetry.cacheHitRate, 90);
-  assert.equal(report.telemetry.avgTps, 50);
+  assert.equal(report.telemetry.avgTps, 200);
   assert.equal(report.telemetry.latestTtftSec, 1.5);
   assert.ok(report.telemetry.totalCostUsd > 0);
   assert.equal(report.checkpointView.activeNumber, 1);

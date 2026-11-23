@@ -225,13 +225,26 @@ function extractTelemetry(steps, genMetas, pricingData) {
 
   let tpsOutputSum = 0;
   let tpsDurationSum = 0;
-  let latestTps = null;
+  let latestE2eTps = null;
+  let decodeOutputSum = 0;
+  let decodeDurationSum = 0;
+  let latestDecodeTps = null;
   let latestStepTokens = null;
 
   const ttftSamples = [];
   for (const gm of genMetas) {
-    const ttft = parseDurationSec(gm?.chatModel?.timeToFirstToken);
+    const cm = gm?.chatModel;
+    const ttft = parseDurationSec(cm?.timeToFirstToken);
     if (ttft !== null) ttftSamples.push(ttft);
+
+    const streamSec = parseDurationSec(cm?.streamingDuration);
+    const outTok = Number(cm?.usage?.outputTokens || 0);
+    // Filter out sub-0.5s buffered tool-call bursts that distort decode TPS
+    if (streamSec !== null && streamSec >= 0.5 && outTok >= 30) {
+      latestDecodeTps = outTok / streamSec;
+      decodeOutputSum += outTok;
+      decodeDurationSum += streamSec;
+    }
   }
 
   // Prefer step-level modelUsage when present, fallback to generatorMetadata usage
@@ -309,8 +322,7 @@ function extractTelemetry(steps, genMetas, pricingData) {
     if (rec.isPlanner && !rec.isCheckpoint && !rec.isCanceled && rec.startMs && rec.endMs) {
       const durSec = (rec.endMs - rec.startMs) / 1000;
       if (durSec >= 0.3 && rec.output >= 20) {
-        const tps = rec.output / durSec;
-        latestTps = tps;
+        latestE2eTps = rec.output / durSec;
         tpsOutputSum += rec.output;
         tpsDurationSum += durSec;
       }
@@ -319,7 +331,10 @@ function extractTelemetry(steps, genMetas, pricingData) {
 
   const totalInputAll = totalInput + totalCacheRead;
   const cacheHitRate = totalInputAll > 0 ? (totalCacheRead / totalInputAll) * 100 : null;
-  const avgTps = tpsDurationSum > 0 ? tpsOutputSum / tpsDurationSum : null;
+  const e2eAvgTps = tpsDurationSum > 0 ? tpsOutputSum / tpsDurationSum : null;
+  const decodeAvgTps = decodeDurationSum > 0 ? decodeOutputSum / decodeDurationSum : null;
+  const avgTps = decodeAvgTps ?? e2eAvgTps;
+  const latestTps = latestDecodeTps ?? latestE2eTps;
   const latestTtftSec = ttftSamples.length ? ttftSamples[ttftSamples.length - 1] : null;
   const avgTtftSec = ttftSamples.length
     ? ttftSamples.reduce((a, b) => a + b, 0) / ttftSamples.length

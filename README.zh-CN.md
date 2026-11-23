@@ -28,8 +28,8 @@ Antigravity 生态中已经有非常优秀的上下文与用量监控插件：
 - **上下文圆点阵与分类明细**：直接通过 Antigravity Language Server (`GetCascadeTrajectory` & `GetAvailableModels`) 读取精确的 `tokenBreakdown`，100 颗圆点按比例呈现系统提示、用户消息、Agent 回复、工具调用与定制扩展占用。
 - **2×2 核心遥测微卡片**：
   - **缓存命中率**：统计缓存读取占比（`cacheRead / (input + cacheRead)`）与新输入 Token
-  - **生成速度 (TPS)**：基于请求真实端到端耗时计算会话平均 TPS 与最新一步 TPS
-  - **首字延迟 (TTFT)**：读取原生 `timeToFirstToken` 指标（最新 & 均值）
+  - **生成速度**：基于原生 `streamingDuration` 计算会话平均与最近一次的纯生成速度（`tok/s`），并自动过滤工具调用缓冲短样本。
+  - **首字延迟 (TTFT)**：直接读取原生 `timeToFirstToken`（会话均值 & 最近一次）。
   - **估算费用 (USD)**：结合本地单价表估算会话参考费用及缓存命中省下的金额
 - **模型配额池 (`GetUserStatus`)**：以紧凑进度条展示当前活跃模型池及主要模型系列的剩余配额与重置倒计时。
 - **全模块可折叠 + 状态持久化**：支持折叠 `Token 占用明细`、`模型配额池`、`检查点 (Checkpoints)`、`知识库 / 产物 / Skill / 系统目录`（Checkpoints 与 Skill 文件默认折叠，标题栏带数量与摘要）。
@@ -65,7 +65,7 @@ node --test tests/test_analyzer.mjs
 - **[dimitr-io/antigravity-desktop-context](https://github.com/dimitr-io/antigravity-desktop-context)** (MIT License)
   - 借鉴了其极具美感的极简侧边栏视觉设计、100 颗圆点阵布局以及上下文分类呈现逻辑。
 - **[yuhuan-dev/antigravity-usage-monitor](https://github.com/yuhuan-dev/antigravity-usage-monitor)** (MIT License)
-  - 借鉴了其通过 Language Server RPC 获取原生 `timeToFirstToken`、`modelUsage`、配额池 (`GetUserStatus`) 的思路，请求级 TPS 的计算口径（避免 `streamingDuration` 在工具调用缓冲时失真），以及 `pricing-catalog.json` 中的模型单价与占位符映射表。
+  - 借鉴了其通过 Language Server RPC 获取原生 `timeToFirstToken`、`streamingDuration`、`modelUsage` 与配额池 (`GetUserStatus`) 的思路，以及 `pricing-catalog.json` 中的模型单价与占位符映射表。
 
 ## License
 

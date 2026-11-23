@@ -28,8 +28,8 @@ There are already great monitoring plugins in the Antigravity ecosystem:
 - **100-Dot Context Grid & Breakdown**: Reads exact `tokenBreakdown` directly from Antigravity Language Server (`GetCascadeTrajectory` & `GetAvailableModels`), visualizing system prompt, user messages, agent responses, tool calls, and customizations.
 - **2×2 Telemetry Micro-Cards**:
   - **Cache Hit Rate**: Tracks cache-read ratio (`cacheRead / (input + cacheRead)`) and uncached input tokens.
-  - **Generation Speed (TPS)**: Computes session average and latest step TPS from real end-to-end request duration.
-  - **First Token Latency (TTFT)**: Reads native `timeToFirstToken` (latest & session average).
+  - **Output Speed**: Computes session average and latest step decode speed (`tok/s`) from `streamingDuration` (filtering out short buffered tool-call bursts).
+  - **TTFT**: Reads native `timeToFirstToken` (session average & latest).
   - **Estimated Cost (USD)**: Estimates session cost and cache savings using a built-in pricing catalog.
 - **Quota Pools (`GetUserStatus`)**: Compact progress bars showing remaining quota and reset countdowns for the active model pool and other model families.
 - **Collapsible Sections with Persistence**: Every section (`Token usage`, `Quota pools`, `Checkpoints`, `Knowledge / Artifact / Skill / System` files) is collapsible with item counts and persisted state (`Checkpoints` and `Skill files` are collapsed by default).
@@ -65,7 +65,7 @@ This project stands on the shoulders of the following open-source projects (both
 - **[dimitr-io/antigravity-desktop-context](https://github.com/dimitr-io/antigravity-desktop-context)** (MIT License)
   - Inspired the minimal native sidebar visual design, the 100-dot context grid, and the context category breakdown layout.
 - **[yuhuan-dev/antigravity-usage-monitor](https://github.com/yuhuan-dev/antigravity-usage-monitor)** (MIT License)
-  - Referenced for Language Server RPC telemetry extraction (`timeToFirstToken`, `modelUsage`, `GetUserStatus` quota pools), request-level TPS calculation methodology (avoiding `streamingDuration` distortion during buffered tool calls), and the model pricing/placeholder catalog.
+  - Referenced for Language Server RPC telemetry extraction (`timeToFirstToken`, `streamingDuration`, `modelUsage`, `GetUserStatus` quota pools) and the model pricing/placeholder catalog.
 
 ## License
 
