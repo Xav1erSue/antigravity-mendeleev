@@ -18,6 +18,7 @@ const pricingData = existsSync(join(HERE, 'pricing.json'))
 let modelCatalog = {};
 let catalogFetchedAt = 0;
 let cachedUserStatus = null;
+let cachedQuotaSummary = null;
 let quotaFetchedAt = 0;
 
 function lsRequest(method, body) {
@@ -91,16 +92,21 @@ async function refreshCatalog() {
 }
 
 async function refreshUserStatus() {
-  if (Date.now() - quotaFetchedAt < QUOTA_TTL_MS && cachedUserStatus) {
-    return cachedUserStatus;
+  if (Date.now() - quotaFetchedAt < QUOTA_TTL_MS && (cachedQuotaSummary || cachedUserStatus)) {
+    return { userStatus: cachedUserStatus, quotaSummary: cachedQuotaSummary };
   }
   quotaFetchedAt = Date.now();
-  try {
-    cachedUserStatus = await lsRequest('GetUserStatus', {});
-  } catch (err) {
-    console.error('[mendeleev] user status unavailable:', err.message);
-  }
-  return cachedUserStatus;
+  const [statusRes, summaryRes] = await Promise.allSettled([
+    lsRequest('GetUserStatus', {}),
+    lsRequest('RetrieveUserQuotaSummary', {}),
+  ]);
+  if (statusRes.status === 'fulfilled') cachedUserStatus = statusRes.value;
+  else console.error('[mendeleev] user status unavailable:', statusRes.reason?.message);
+
+  if (summaryRes.status === 'fulfilled') cachedQuotaSummary = summaryRes.value;
+  else console.error('[mendeleev] quota summary unavailable:', summaryRes.reason?.message);
+
+  return { userStatus: cachedUserStatus, quotaSummary: cachedQuotaSummary };
 }
 
 function workspacePath(uri) {
@@ -141,7 +147,8 @@ function buildTextReport(r) {
     lines.push('');
     lines.push('Quotas:');
     for (const p of r.quotas.pools) {
-      lines.push(`- ${p.family}: ${p.remainingPct}%`);
+      const parts = (p.buckets || []).map((b) => `${b.window}: ${b.remainingPct}%`);
+      lines.push(`- ${p.name}: ${parts.join(', ')}`);
     }
   }
   return lines.join('\n');
@@ -172,6 +179,7 @@ async function getReport(conversationId, workspaceUri) {
     catalog: modelCatalog,
     pricingData,
     userStatus: cachedUserStatus,
+    quotaSummary: cachedQuotaSummary,
     workspace,
   });
 

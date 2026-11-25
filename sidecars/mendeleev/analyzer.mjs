@@ -358,62 +358,107 @@ function extractTelemetry(steps, genMetas, pricingData) {
   };
 }
 
-export function extractQuotaPools(userStatus, currentModelId) {
-  const configs = userStatus?.userStatus?.cascadeModelConfigData?.clientModelConfigs || [];
-  if (!configs.length) return { current: null, pools: [] };
+function normalizeQuotaBucket(raw, nowMs = Date.now()) {
+  if (!raw || typeof raw !== 'object') return null;
+  let frac = null;
+  if (raw.disabled === true) {
+    frac = 0;
+  } else if (raw.remainingFraction !== undefined && raw.remainingFraction !== null && Number.isFinite(Number(raw.remainingFraction))) {
+    frac = Math.max(0, Math.min(1, Number(raw.remainingFraction)));
+  } else if (typeof raw.resetTime === 'string' && raw.resetTime.trim()) {
+    const resetMs = parseIsoMs(raw.resetTime);
+    if (resetMs !== null && resetMs > nowMs) frac = 0;
+  }
+  if (frac === null) return null;
+  return {
+    remainingPct: Math.round(frac * 100),
+    resetTime: raw.resetTime || null,
+  };
+}
 
+function classifyBucketWindow(bucket, nowMs = Date.now()) {
+  const w = String(bucket?.window || '').trim().toLowerCase();
+  const idName = `${bucket?.bucketId || ''} ${bucket?.displayName || ''}`.toLowerCase();
+  if (w === '5h' || /\b5h\b|five[-_\s]?hour/.test(idName)) return '5h';
+  if (w === 'weekly' || w === '7d' || /week/.test(idName)) return 'weekly';
+  const resetMs = parseIsoMs(bucket?.resetTime);
+  if (resetMs !== null && resetMs <= nowMs + 6 * 3600 * 1000) return '5h';
+  return 'weekly';
+}
+
+function isModelInGroup(modelName, groupName, groupDesc) {
+  const base = String(modelName || '').replace(/\s*\([^)]*\)\s*$/, '').trim().toLowerCase();
+  if (!base) return false;
+  const hay = `${groupName || ''} ${groupDesc || ''}`.toLowerCase();
+  if (hay.includes(base)) return true;
+  if (/claude|gpt/i.test(base) && /claude|gpt/i.test(hay)) return true;
+  if (/gemini|orchestrator/i.test(base) && /gemini/i.test(hay)) return true;
+  return false;
+}
+
+export function extractQuotaPools(userStatus, currentModelId, quotaSummary = null, currentModelName = '') {
   const planName = userStatus?.userStatus?.planStatus?.planInfo?.planName || '';
-  const byKey = new Map();
-  let current = null;
+  const groups = quotaSummary?.response?.groups || quotaSummary?.groups || [];
+  const nowMs = Date.now();
 
+  if (Array.isArray(groups) && groups.length > 0) {
+    const pools = [];
+    for (const g of groups) {
+      const name = String(g.displayName || '').trim();
+      const desc = String(g.description || '').trim();
+      const buckets = [];
+      for (const b of g.buckets || []) {
+        const norm = normalizeQuotaBucket(b, nowMs);
+        if (!norm) continue;
+        buckets.push({
+          window: classifyBucketWindow(b, nowMs),
+          remainingPct: norm.remainingPct,
+          resetTime: norm.resetTime,
+        });
+      }
+      if (!buckets.length) continue;
+      buckets.sort((a, b) => (a.window === '5h' ? -1 : 1) - (b.window === '5h' ? -1 : 1));
+      pools.push({
+        name,
+        isCurrent: isModelInGroup(currentModelName || currentModelId, name, desc),
+        buckets,
+      });
+    }
+    if (pools.length > 0) return { planName, pools };
+  }
+
+  // Fallback to GetUserStatus when RetrieveUserQuotaSummary is unavailable
+  const configs = userStatus?.userStatus?.cascadeModelConfigData?.clientModelConfigs || [];
+  if (!configs.length) return { planName, pools: [] };
+
+  const byGroup = new Map();
   for (const cfg of configs) {
     const modelId = cfg?.modelOrAlias?.model || '';
     const label = cfg?.label || modelId;
-    const qi = cfg?.quotaInfo;
-    if (!qi || qi.remainingFraction === undefined) continue;
+    const norm = normalizeQuotaBucket(cfg?.quotaInfo, nowMs);
+    if (!norm) continue;
 
-    const remainingPct = Math.max(0, Math.min(100, Number((qi.remainingFraction * 100).toFixed(1))));
-    const entry = {
-      modelId,
-      label,
-      remainingPct,
-      resetTime: qi.resetTime || null,
-    };
+    const groupName = /claude|gpt/i.test(label)
+      ? 'Claude & GPT'
+      : /gemini|orchestrator/i.test(label)
+        ? 'Gemini Models'
+        : label;
 
-    if (modelId === currentModelId) current = entry;
-
-    // Group similar quota pools (same resetTime + remainingPct + family prefix)
-    const family = /claude/i.test(label)
-      ? 'Claude'
-      : /gpt/i.test(label)
-        ? 'GPT'
-        : /carbon/i.test(label)
-          ? 'Gemini 4 Carbon'
-          : /argon/i.test(label)
-            ? 'Gemini 4 Argon'
-            : /hydrogen/i.test(label)
-              ? 'Gemini 4 Hydrogen'
-              : /gemini/i.test(label)
-                ? 'Gemini'
-                : label;
-
-    const poolKey = `${family}|${qi.resetTime || ''}|${remainingPct}`;
-    if (!byKey.has(poolKey)) {
-      byKey.set(poolKey, {
-        family,
-        remainingPct,
-        resetTime: qi.resetTime || null,
-        isCurrent: modelId === currentModelId,
+    const isCur = modelId === currentModelId;
+    if (!byGroup.has(groupName)) {
+      byGroup.set(groupName, {
+        name: groupName,
+        isCurrent: isCur,
+        buckets: [{ window: classifyBucketWindow({ resetTime: norm.resetTime }, nowMs), ...norm }],
       });
-    } else if (modelId === currentModelId) {
-      byKey.get(poolKey).isCurrent = true;
+    } else if (isCur) {
+      byGroup.get(groupName).isCurrent = true;
     }
   }
 
   return {
     planName,
-    current,
-    pools: Array.from(byKey.values()).slice(0, 6),
+    pools: Array.from(byGroup.values()),
   };
 }
 
@@ -422,6 +467,7 @@ export function analyzeTrajectory({
   catalog = {},
   pricingData = {},
   userStatus = null,
+  quotaSummary = null,
   workspace = '',
 }) {
   const steps = trajectory?.steps || [];
@@ -554,7 +600,7 @@ export function analyzeTrajectory({
 
   const files = extractFiles(steps, workspace);
   const telemetry = extractTelemetry(steps, genMetas, pricingData);
-  const quotas = extractQuotaPools(userStatus, modelId);
+  const quotas = extractQuotaPools(userStatus, modelId, quotaSummary, displayName);
 
   return {
     model: displayName,

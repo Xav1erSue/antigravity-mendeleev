@@ -122,11 +122,12 @@
   .mark.free { background: transparent; border: 1.5px solid var(--empty); }
 
   /* Quota pools */
-  .quota-list { display: flex; flex-direction: column; gap: 7px; }
-  .quota-item { display: flex; flex-direction: column; gap: 3px; }
-  .quota-top { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; font-size: 12px; }
-  .quota-name { display: flex; align-items: center; gap: 5px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .quota-tag { font-size: 10px; color: var(--c-ok); border: 1px solid color-mix(in srgb, var(--c-ok) 45%, transparent); border-radius: 4px; padding: 0 4px; }
+  .quota-list { display: flex; flex-direction: column; gap: 10px; }
+  .quota-group { display: flex; flex-direction: column; gap: 5px; }
+  .quota-head { display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; }
+  .quota-tag { font-size: 10px; font-weight: 500; color: var(--c-ok); border: 1px solid color-mix(in srgb, var(--c-ok) 45%, transparent); border-radius: 4px; padding: 0 4px; }
+  .quota-bucket { display: flex; flex-direction: column; gap: 3px; }
+  .quota-top { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; font-size: 11.5px; }
   .quota-bar { height: 4px; border-radius: 999px; background: var(--empty); overflow: hidden; }
   .quota-fill { height: 100%; border-radius: 999px; background: var(--c-agent); }
   .quota-fill.warn { background: var(--c-warn); }
@@ -197,6 +198,8 @@
       ckHint: '{n} 个 · 已压缩 {h} 次',
       ckHintSingle: '{n} 个',
       currentPool: '当前',
+      win5h: '5 小时限额',
+      winWeekly: '每周限额',
       resetIn: '{t} 后重置',
       resetReady: '即将重置',
       updated: '更新于 {t}',
@@ -253,6 +256,8 @@
       ckHint: '{n} · {h} compacted',
       ckHintSingle: '{n}',
       currentPool: 'Active',
+      win5h: '5h limit',
+      winWeekly: 'Weekly limit',
       resetIn: 'Resets in {t}',
       resetReady: 'Resetting',
       updated: 'Updated {t}',
@@ -444,18 +449,27 @@
   function renderQuotas(r) {
     const q = r.quotas;
     if (!q || !q.pools || !q.pools.length) return '';
-    const rows = q.pools.map((p) => {
-      const cls = p.remainingPct <= 15 ? 'bad' : p.remainingPct <= 35 ? 'warn' : '';
-      const resetTxt = fmtReset(p.resetTime);
-      return `<div class="quota-item">
-        <div class="quota-top">
-          <span class="quota-name">${esc(p.family)}${p.isCurrent ? `<span class="quota-tag">${esc(t('currentPool'))}</span>` : ''}</span>
-          <span class="num">${p.remainingPct.toFixed(0)}%${resetTxt ? ` <span class="dim">· ${esc(resetTxt)}</span>` : ''}</span>
+    const groupsHtml = q.pools.map((p) => {
+      const bucketsHtml = (p.buckets || []).map((b) => {
+        const cls = b.remainingPct <= 15 ? 'bad' : b.remainingPct <= 35 ? 'warn' : '';
+        const winLabel = b.window === '5h' ? t('win5h') : t('winWeekly');
+        const resetTxt = fmtReset(b.resetTime);
+        return `<div class="quota-bucket">
+          <div class="quota-top">
+            <span class="dim">${esc(winLabel)}</span>
+            <span class="num">${b.remainingPct}%${resetTxt ? ` <span class="dim">· ${esc(resetTxt)}</span>` : ''}</span>
+          </div>
+          <div class="quota-bar"><div class="quota-fill ${cls}" style="width:${b.remainingPct}%"></div></div>
+        </div>`;
+      }).join('');
+      return `<div class="quota-group">
+        <div class="quota-head">
+          <span>${esc(p.name)}</span>${p.isCurrent ? `<span class="quota-tag">${esc(t('currentPool'))}</span>` : ''}
         </div>
-        <div class="quota-bar"><div class="quota-fill ${cls}" style="width:${p.remainingPct}%"></div></div>
+        ${bucketsHtml}
       </div>`;
     }).join('');
-    return section('quotas', t('secQuotas'), q.planName || '', `<div class="quota-list">${rows}</div>`);
+    return section('quotas', t('secQuotas'), q.planName || '', `<div class="quota-list">${groupsHtml}</div>`);
   }
 
   function renderCheckpoints(r) {
@@ -557,7 +571,8 @@
       lines.push('');
       lines.push(t('secQuotas'));
       for (const p of r.quotas.pools) {
-        lines.push(`- ${p.family}: ${p.remainingPct}%`);
+        const parts = (p.buckets || []).map((b) => `${b.window === '5h' ? t('win5h') : t('winWeekly')} ${b.remainingPct}%`);
+        lines.push(`- ${p.name}: ${parts.join(' · ')}`);
       }
     }
     return lines.join('\n');

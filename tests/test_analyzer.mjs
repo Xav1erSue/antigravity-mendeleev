@@ -102,11 +102,35 @@ test('analyzeTrajectory computes context, cache hit rate, TPS, TTFT, cost, and q
     },
   };
 
+  const quotaSummary = {
+    response: {
+      groups: [
+        {
+          displayName: 'Gemini Models',
+          description: 'Models within this group: Gemini 4 Hydrogen, Gemini 4 Carbon',
+          buckets: [
+            { bucketId: 'gemini-weekly', window: 'weekly', remainingFraction: 0.64, resetTime: '2026-12-01T00:00:00Z' },
+            { bucketId: 'gemini-5h', window: '5h', remainingFraction: 0.77, resetTime: '2026-11-25T12:00:00Z' },
+          ],
+        },
+        {
+          displayName: 'Claude and GPT models',
+          description: 'Models within this group: Claude Opus 5.5, GPT-OSS 120B',
+          buckets: [
+            { bucketId: '3p-weekly', window: 'weekly', remainingFraction: 1 },
+            { bucketId: '3p-5h', window: '5h', remainingFraction: 1 },
+          ],
+        },
+      ],
+    },
+  };
+
   const report = analyzeTrajectory({
     trajectory,
     catalog: { MODEL_PLACEHOLDER_M526: { maxTokens: 1048576, displayName: 'Gemini 4 Hydrogen (Medium)' } },
     pricingData,
     userStatus,
+    quotaSummary,
   });
 
   assert.equal(report.model, 'Gemini 4 Hydrogen (Medium)');
@@ -118,6 +142,14 @@ test('analyzeTrajectory computes context, cache hit rate, TPS, TTFT, cost, and q
   assert.ok(report.telemetry.totalCostUsd > 0);
   assert.equal(report.checkpointView.activeNumber, 1);
   assert.equal(report.files.skills.length, 1);
-  assert.equal(report.quotas.pools.length, 1);
-  assert.equal(report.quotas.pools[0].remainingPct, 92);
+  assert.equal(report.quotas.pools.length, 2);
+  assert.equal(report.quotas.pools[0].name, 'Gemini Models');
+  assert.equal(report.quotas.pools[0].isCurrent, true);
+  assert.deepEqual(report.quotas.pools[0].buckets.map((b) => [b.window, b.remainingPct]), [
+    ['5h', 77],
+    ['weekly', 64],
+  ]);
+  assert.equal(report.quotas.pools[1].name, 'Claude and GPT models');
+  assert.equal(report.quotas.pools[1].isCurrent, false);
+  assert.equal(report.quotas.pools[1].buckets[0].remainingPct, 100);
 });
